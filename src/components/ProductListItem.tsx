@@ -1,12 +1,13 @@
-import { Image, StyleSheet, TouchableOpacity } from "react-native";
+import { StyleSheet, TouchableOpacity } from "react-native";
 import { Link, useSegments } from "expo-router";
 
 import { Text, View } from "../components/Themed";
 import Colors from "@/constants/Colors";
-import { Product } from "../types";
+import { Tables } from "@/database.types";
+import RemoteImage from "./RemoteImage";
 
 type ProductListItemProps = {
-  product: Product;
+  product: Tables<"products">;
 };
 
 export const defaultPizzaImage =
@@ -18,15 +19,14 @@ const ProductListItem = ({ product }: ProductListItemProps) => {
   return (
     <Link href={`/${segments[0]}/menu/${product.id}`} asChild>
       <TouchableOpacity style={styles.container}>
-        <Image
-          source={{
-            uri: product.image || defaultPizzaImage,
-          }}
+        <RemoteImage
+          path={product.image}
+          fallback={defaultPizzaImage}
           style={styles.image}
           resizeMode="contain"
         />
         <Text style={styles.title}>{product.name}</Text>
-        <Text style={styles.price}>${product.price}</Text>
+        <Text style={styles.price}>${product.price.toFixed(2)}</Text>
       </TouchableOpacity>
     </Link>
   );

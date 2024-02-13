@@ -1,12 +1,18 @@
-import { CartItem, Product } from "@/types";
+import { CartItem, Tables } from "@/types";
 import { PropsWithChildren, createContext, useContext, useState } from "react";
 import { randomUUID } from "expo-crypto";
+import { useInsertOrder } from "@/api/orders";
+import { useRouter } from "expo-router";
+import { useInsertOrderItems } from "@/api/order-items";
+
+type Product = Tables<"products">;
 
 type CartType = {
   items: CartItem[];
   addItem: (product: Product, size: CartItem["size"]) => void;
   updateQty: (itemId: string, amount: -1 | 1) => void;
   total: number;
+  checkout: () => void;
 };
 
 export const CartContext = createContext<CartType>({
@@ -14,10 +20,15 @@ export const CartContext = createContext<CartType>({
   addItem: () => {},
   updateQty: () => {},
   total: 0,
+  checkout: () => {},
 });
 
 const CartProvider = ({ children }: PropsWithChildren) => {
   const [items, setItems] = useState<CartItem[]>([]);
+
+  const { mutate: insertOrder } = useInsertOrder();
+  const { mutate: insertOrderItems } = useInsertOrderItems();
+  const router = useRouter();
 
   const addItem = (product: Product, size: CartItem["size"]) => {
     // if item already in cart, increment qty
@@ -60,8 +71,40 @@ const CartProvider = ({ children }: PropsWithChildren) => {
     0
   );
 
+  const clearCart = () => {
+    setItems([]);
+  };
+
+  const checkout = () => {
+    insertOrder(
+      { total },
+      {
+        onSuccess: saveOrderItems,
+      }
+    );
+  };
+
+  const saveOrderItems = (newOrder: { id: any }) => {
+    if (!newOrder) return;
+
+    insertOrderItems(
+      {
+        items,
+        order_id: newOrder.id,
+      },
+      {
+        onSuccess() {
+          setItems([]);
+          router.push(`/(user)/orders/${newOrder.id}`);
+        },
+      }
+    );
+  };
+
   return (
-    <CartContext.Provider value={{ items, addItem, total, updateQty }}>
+    <CartContext.Provider
+      value={{ items, addItem, total, checkout, updateQty }}
+    >
       {children}
     </CartContext.Provider>
   );

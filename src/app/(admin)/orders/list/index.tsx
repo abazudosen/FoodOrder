@@ -1,9 +1,24 @@
-import { FlatList } from "react-native";
-import orders from "../../../../../assets/data/orders";
+import { ActivityIndicator, Text, FlatList } from "react-native";
 import OrderListItem from "../../../../components/OrderListItem";
-import { Stack } from "expo-router";
+import { useAdminOrderList } from "@/api/orders";
+import { useInsertOrderSubscription } from "@/api/orders/subscriptions";
 
 export default function Orders() {
+  const {
+    data: orders,
+    isLoading,
+    error,
+  } = useAdminOrderList({ archived: false });
+
+  useInsertOrderSubscription();
+
+  if (isLoading) {
+    return <ActivityIndicator />;
+  }
+  if (error) {
+    return <Text>Failed to fetch</Text>;
+  }
+
   return (
     <>
       <FlatList

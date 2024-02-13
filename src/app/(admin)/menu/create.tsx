@@ -1,11 +1,22 @@
 import { View, Text, Image, StyleSheet, TextInput, Alert } from "react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 
 import Button from "@/components/Button";
 import { defaultPizzaImage } from "@/components/ProductListItem";
 import Colors from "@/constants/Colors";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  useDeleteProduct,
+  useInsertProduct,
+  useProduct,
+  useUpdateProduct,
+} from "@/api/products";
+import * as FileSystem from "expo-file-system";
+import { randomUUID } from "expo-crypto";
+import { supabase } from "@/app/lib/supabase";
+import { decode } from "base64-arraybuffer";
+import RemoteImage from "@/components/RemoteImage";
 
 const CreateProduct = () => {
   const [name, setName] = useState("");
@@ -13,8 +24,34 @@ const CreateProduct = () => {
   const [errors, setErrors] = useState("");
   const [image, setImage] = useState<string | null>(null);
 
-  const { id } = useLocalSearchParams();
+  const router = useRouter();
+
+  const { id: idString } = useLocalSearchParams();
+  let id;
+
+  if (typeof idString === "string") {
+    id = parseFloat(idString);
+  } else if (Array.isArray(idString) && idString.length > 0) {
+    id = parseFloat(idString[0]);
+  } else {
+    // Handle the case where idString is undefined or an empty array
+    // For example, set id to some default value or throw an error
+    id = 0; // Default value
+  }
   const isUpdating = !!id;
+
+  const { data: updatedProduct, isLoading } = useProduct(id);
+  const { mutate: deleteProduct } = useDeleteProduct();
+  const { mutate: insertProduct } = useInsertProduct();
+  const { mutate: updateProduct } = useUpdateProduct();
+
+  useEffect(() => {
+    if (updatedProduct) {
+      setName(updatedProduct?.name);
+      setPrice(updatedProduct?.price.toString());
+      setImage(updatedProduct?.image);
+    }
+  }, [updatedProduct]);
 
   const resetFields = () => {
     setName("");
@@ -32,12 +69,10 @@ const CreateProduct = () => {
       return false;
     }
     if (isNaN(parseFloat(price))) {
-      if (!name) {
-        setErrors("Price is not a number");
-        return false;
-      }
-      return true;
+      setErrors("Price should be a number");
+      return false;
     }
+    return true;
   };
 
   const pickImage = async () => {
@@ -49,27 +84,54 @@ const CreateProduct = () => {
       quality: 1,
     });
 
-    console.log(result);
+    // console.log(result);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   };
 
-  const onCreate = () => {
-    if (!validateInput()) {
+  const onCreate = async () => {
+    if (!validateInput) {
       return;
     }
-    console.warn("creating product");
-    resetFields();
+    const imagePath = await uploadImage();
+    // const newProduct: Omit<Product, "id"> = { name, price: parseFloat(price) };
+    // if (imagePath) {
+    //   newProduct.image = imagePath;
+    // }
+
+    insertProduct(
+      { name, price: parseFloat(price), image: imagePath },
+      {
+        onSuccess: () => {
+          resetFields();
+          router.back();
+        },
+      }
+    );
   };
 
-  const onUpdateCreate = () => {
-    if (!validateInput()) {
+  const onUpdateCreate = async () => {
+    if (!validateInput) {
       return;
     }
-    console.warn("updating product");
-    resetFields();
+    const imagePath = await uploadImage();
+    updateProduct(
+      {
+        id,
+        name,
+        price: parseFloat(price),
+        image: imagePath,
+        created_at: "",
+      },
+      {
+        onSuccess: () => {
+          resetFields();
+          router.back();
+        },
+      }
+    );
   };
 
   const onSubmit = () => {
@@ -81,8 +143,14 @@ const CreateProduct = () => {
   };
 
   const onDelete = () => {
-    console.warn("DELETE!!!!");
+    deleteProduct(id, {
+      onSuccess: () => {
+        resetFields();
+        router.replace("/(admin)");
+      },
+    });
   };
+
   const confirmDelete = () => {
     Alert.alert("Confirm", "Are you sure you want to delete this product", [
       {
@@ -95,6 +163,25 @@ const CreateProduct = () => {
         onPress: onDelete,
       },
     ]);
+  };
+
+  const uploadImage = async () => {
+    if (!image?.startsWith("file://")) {
+      return;
+    }
+
+    const base64 = await FileSystem.readAsStringAsync(image, {
+      encoding: "base64",
+    });
+    const filePath = `${randomUUID()}.png`;
+    const contentType = "image/png";
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .upload(filePath, decode(base64), { contentType });
+
+    if (data) {
+      return data.path;
+    }
   };
 
   return (
@@ -128,7 +215,7 @@ const CreateProduct = () => {
       />
 
       <Text style={{ color: "red" }}>{errors}</Text>
-      <Button onPress={onCreate} text={isUpdating ? "Update" : "Create"} />
+      <Button onPress={onSubmit} text={isUpdating ? "Update" : "Create"} />
       {isUpdating && (
         <Text style={styles.textBtn} onPress={confirmDelete}>
           Delete

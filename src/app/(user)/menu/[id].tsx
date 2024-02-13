@@ -1,26 +1,35 @@
-import { View, Text, StyleSheet, Image, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
 import React, { useState } from "react";
 import { Stack, useLocalSearchParams } from "expo-router";
 
-import products from "@assets/data/products";
 import { PizzaSize } from "@/types";
 import Button from "@/components/Button";
 import { useCart } from "@/providers/CartProvider";
 import { useRouter } from "expo-router";
 import { defaultPizzaImage } from "@/components/ProductListItem";
+import { useProduct } from "@/api/products";
+import RemoteImage from "@/components/RemoteImage";
 
 const sizes: PizzaSize[] = ["S", "M", "L", "XL"];
 // const product = products[0];
 
 const ProductDetails = () => {
-  const { id } = useLocalSearchParams();
+  const { id: idString } = useLocalSearchParams();
+  const id = parseFloat(typeof idString === "string" ? idString : idString[0]);
+
+  const { data: product, isLoading, error } = useProduct(id);
+
   const { addItem } = useCart();
 
   const router = useRouter();
 
   const [selectedSize, setSelectedSize] = useState<PizzaSize>("M");
-
-  const product = products.find((p) => p?.id.toString() === id);
 
   const addToCart = () => {
     if (!product) return;
@@ -28,11 +37,19 @@ const ProductDetails = () => {
     router.push("/cart");
   };
 
+  if (isLoading) {
+    return <ActivityIndicator />;
+  }
+  if (error || !product) {
+    return <Text>Failed to fetch product</Text>;
+  }
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: product?.name }} />
-      <Image
-        source={{ uri: product?.image || defaultPizzaImage }}
+      <RemoteImage
+        fallback={defaultPizzaImage}
+        path={product.image}
         style={styles.image}
         resizeMode="contain"
       />
@@ -87,7 +104,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginTop: "auto",
   },
-
   sizes: {
     flexDirection: "row",
     justifyContent: "space-around",
